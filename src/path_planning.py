@@ -7,6 +7,7 @@ from geometry_msgs.msg import PoseStamped, PoseArray
 from nav_msgs.msg import Odometry, OccupancyGrid
 import rospkg
 import time, os
+from tf.transformations import euler_from_quaternion
 from utils import LineTrajectory
 
 class PathPlan(object):
@@ -14,7 +15,7 @@ class PathPlan(object):
     current car pose.
     """
     def __init__(self):
-        self.odom_topic = rospy.get_param("~odom_topic")
+        self.odom_topic = rospy.get_param("~odom_topic", "/odom")
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
@@ -23,6 +24,20 @@ class PathPlan(object):
         
         ## TWEAKABLE ##
         self.step_size = 0.1
+
+        # Declare vars
+        self.resolution = None
+        self.width = None
+        self.height = None
+        self.origin = None
+        self.grid = None
+        self.map_resolved = False
+        self.start_point = None
+        self.start_resolved = False
+        self.end_point = None
+        self.end_resolved = False
+
+        self.plan_path(0, 0 , 0)
 
     def map_cb(self, msg):
         data = np.array(msg.data, np.double)/100.
@@ -34,27 +49,27 @@ class PathPlan(object):
         # the real world pose of the origin of the map [m, m, rad]
         origin_p = msg.info.origin.position
         origin_o = msg.info.origin.orientation
-        origin_o = tf.transformations.euler_from_quaternion((origin_o.x,
-                                                             origin_o.y,
-                                                             origin_o.z,
-                                                             origin_o.w))
+        origin_o = euler_from_quaternion((origin_o.x, origin_o.y,
+                                         origin_o.z, origin_o.w))
         self.origin = (origin_p.x, origin_p.y, origin_o[2])
-        self.grid = np.reshape(data, (height, width))
+        self.grid = np.reshape(data, (self.height, self.width))
         self.map_resolved = True
 
     def odom_cb(self, msg):
-        x, y = msg.pose.pose.position
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
         # THIS MIGHT NEED TO CHANGE TO X INSTEAD OF Y
-        _, th, _ = euler_from_quaternion[q.x, q.y, q.z, q.w]
+        _, th, _ = euler_from_quaternion([q.x, q.y, q.z, q.w])
         self.start_point = (x, y, th)
         self.start_resolved = True
 
     def goal_cb(self, msg):
-        x, y = msg.pose.position
+        x = msg.pose.position.x
+        y = msg.pose.position.y
         q = msg.pose.orientation
         # THIS MIGHT NEED TO CHANGE TO X INSTEAD OF Y
-        _, th, _ = euler_from_quaternion[q.x, q.y, q.z, q.w]
+        _, th, _ = euler_from_quaternion([q.x, q.y, q.z, q.w])
         self.end_point = (x, y, th)
         self.end_resolved = True
         
@@ -135,11 +150,6 @@ class PathPlan(object):
         # Use np.argmin to find smallest dist
         return gr[np.argmin(path_arr)]
 
-    def pix2real(u, v):
-        pass
-        # multiply (u, v) * self.resolution
-        # apply rotation and translation of self.origin.orientation and self.origin.position
-
     def real2pix(point):
         x, y, th = point
         # multiply (x, y) * self.resolution
@@ -158,5 +168,4 @@ class PathPlan(object):
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
-    pf.plan_path(pf.start_point, pf.end_point, pf.grid)
     rospy.spin()
