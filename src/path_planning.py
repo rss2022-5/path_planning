@@ -23,7 +23,8 @@ class PathPlan(object):
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
         
         ## TWEAKABLE ##
-        self.step_size = 0.1
+        self.step_size = 1
+        self.turning_radius = 0.4
 
         # Declare vars
         self.resolution = None
@@ -36,6 +37,7 @@ class PathPlan(object):
         self.start_resolved = False
         self.end_point = None
         self.end_resolved = False
+        self.graph = None
 
         self.plan_path(0, 0 , 0)
 
@@ -75,7 +77,7 @@ class PathPlan(object):
         
     def plan_path(self, start_point, end_point, map):
         ## CODE FOR PATH PLANNING ##
-        graph = {}
+        self.graph = {}
 
         # TWEAKABLE CONSTANTS #
         num_samples = 200
@@ -86,28 +88,30 @@ class PathPlan(object):
 
         # Run a discrete number of samples
         for i in range(num_samples):
-            z_rand = sample()
-            z_nearest = nearest(z_rand)
+            z_rand = self.sample()
+            z_nearest = self.nearest(z_rand)
             # Compute path from newest point to nearest one
-            new_path = steer(z_nearest, z_rand)
-            if collision_free(new_path):
+            new_path = self.steer(z_nearest, z_rand)
+            if self.collision_free(new_path):
                 # z_new = new_path(T)
                 # End Node: [Initial Node, path]
-                graph[z_rand] = [z_nearest, new_path]
+                self.graph[z_rand] = [z_nearest, new_path]
                 # check if the line segment from new vert to goal collides
-                end_run = steer(z_rand, self.end_point)
+                end_run = self.steer(z_rand, self.end_point)
                 # if not, end RRT
-                if collision_free(end_run):
-                    graph[self.end_point] = [z_rand, end_run]
+                if self.collision_free(end_run):
+                    self.graph[self.end_point] = [z_rand, end_run]
                     break;
 
         # Search backward for the shortest path
         curr = self.end_point
-        traj = []
+        curr_x, curr_y, curr_th = self.end_point
+        traj = np.array([[curr_x, curr_y, curr_th]])
         while curr is not self.start_point:
-            c_parent, c_path = graph[curr]
+            c_parent, c_path = self.graph[curr]
             # Add elements to the trajectory once found
-            traj = np.insert(traj, 0, c_path)
+            c_path = np.array(c_path)
+            traj = np.concatenate((c_path, traj))
             curr = c_parent
         
         # publish trajectory
@@ -117,40 +121,42 @@ class PathPlan(object):
         self.trajectory.publish_viz()
 
     def sample(self):
-        x = np.rint(np.random.random_sample()*self.map_x).astype(int)
-        y = np.rint(np.random.random_sample()*self.map_y).astype(int)
+        x = np.rint(np.random.random_sample()*self.width).astype(int)
+        y = np.rint(np.random.random_sample()*self.height).astype(int)
         th = np.rint(np.random.random_sample()*2*np.pi).astype(int)
         return (x, y, th)
 
-    def steer(near, rand):
+    def steer(self, near, rand):
         #Use dubins curves
         path = dubins.shortest_path(near, rand, self.turning_radius)
         configurations, _ = path.sample_many(self.step_size)
         return configurations
     
-    def collision_free(path):
+    def collision_free(self, path):
         # check if each element of the path is in the occupancy grid
         for el in path:
-            if collision(el):
+            if self.collision(el):
                 return False
         return True
 
-    def collision(point):
-        u, v, _ = real2pix(point)
-        return self.grid[v, u] == 1.0
+    def collision(self, point):
+        u, v = self.real2pix(point)
+        return self.grid[v, u] is 1.0
 
-    def nearest(rand):
+    def nearest(self, rand):
+        if len(self.graph) == 0:
+            return self.start_point
         # find distance of each point in graph to rand point
         gr = np.array([])
         paths = np.array([])
-        for n in graph:
+        for n in self.graph:
             gr = np.append(gr, n)
             path_len = dubins.shortest_path(n, rand, self.turning_radius).path_length()
             paths = np.append(paths, path_len)
         # Use np.argmin to find smallest dist
-        return gr[np.argmin(path_arr)]
+        return gr[np.argmin(paths)]
 
-    def real2pix(point):
+    def real2pix(self, point):
         x, y, th = point
         # multiply (x, y) * self.resolution
         x = x*self.resolution
@@ -159,9 +165,9 @@ class PathPlan(object):
         ang = self.origin[2]
         rot = np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]]).T
         rotated = np.dot(rot, np.array([[x], [y]]))
-        new_pos_u = rotated + self.origin[0]
-        new_pos_v = rotated + self.origin[1]
-        return u, v
+        new_pos_u = np.rint(rotated + self.origin[0]).astype(int)
+        new_pos_v = np.rint(rotated + self.origin[1]).astype(int)
+        return (new_pos_u, new_pos_v)
         
         
                                 
