@@ -156,8 +156,8 @@ class PathPlan(object):
         self.trajectory.publish_viz()
 
     def sample(self):
-        x = np.random.random_sample()*(self.width*self.resolution)
-        y = np.random.random_sample()*(self.height*self.resolution)
+        x = np.random.random_sample()*((self.width - 1)*self.resolution)
+        y = np.random.random_sample()*((self.height - 1)*self.resolution)
         th = np.random.random_sample()*2*np.pi
         return (x, y, th)
 
