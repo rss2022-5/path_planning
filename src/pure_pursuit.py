@@ -16,8 +16,8 @@ class PurePursuit(object):
     """
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic")
-        self.lookahead        = 5.
-        self.speed            = 1.0
+        self.lookahead        = 1.
+        self.speed            = 10.0
         self.wrap             = 0
         self.wheelbase_length = 0.325
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
@@ -33,24 +33,18 @@ class PurePursuit(object):
     def lineseg_dists(self, p, a, b):
     # Handle case where p is a single point, i.e. 1d array.
         p = np.atleast_2d(p)
-
         if np.all(a == b):
             return np.linalg.norm(p - a, axis=1)
-
         # normalized tangent vector
         d = np.divide(b - a, np.linalg.norm(b - a))
-
         # signed parallel distance components
         s = np.dot(a - p, d)
         t = np.dot(p - b, d)
-
         # clamped parallel distance
         h = np.maximum.reduce([s, t, np.zeros(len(p))])
-
         # perpendicular distance component, as before
         # note that for the 3D case these will be vectors
         c = np.cross(p - a, d)
-
         # use hypot for Pythagoras to improve accuracy
         return np.hypot(h, c)
 
@@ -59,29 +53,37 @@ class PurePursuit(object):
         a = np.dot(v,v)
         b = 2 * np.dot(v,pee1 - Q)
         c = np.dot(pee1,pee1) + np.dot(Q,Q) - 2 * np.dot(pee1, Q) - r**2
-
         disc = b**2 - 4 * a * c
-        
         if disc < 0:
             return None
         sqrt_disc = np.sqrt(disc)
         t1 = (-b + sqrt_disc) / (2 * a)
         t2 = (-b - sqrt_disc) / (2 * a)
-
-        #TODO Add in and functionality - if both are? i tink
+        #TODO Add in and functionality - if both are? i think
         if not (0 <= t1 <= 1 or 0 <= t2 <= 1):
             return None
-        
+        #This version of t finds the closest point on the line eg (we dont need this)
         t = max(0, min(1, - b / (2 * a)))
+        return pee1 + t1 * v, pee1 + t2 * v
+    def map_to_car_convert(self, result, exp_position, exp_quaternion):
+        """
+        result = [x,y] from math calc
+        exp_position = car position
+        exp_quaternion = car quaternion
+        """
+        translated  = np.array(result) - self.car_pos
+        homo_coor = np.concatenate((translated,[exp_position[2]],[1]))
+        inverted_quat = tf.transformations.quaternion_inverse(exp_quaternion)
+        x, y,_,_ = np.dot(tf.transformations.quaternion_matrix(inverted_quat),homo_coor)
+        return x, y
 
-        return pee1 + t * v
-        
-    def draw_marker(self,x,y):
+    def draw_marker(self,x,y, id):
         """
         Publish a marker to represent the cone in rviz
         """
         marker = Marker()
-        marker.header.frame_id = "map"
+        marker.header.frame_id = "base_link"
+        marker.id = id
         marker.type = marker.CYLINDER
         marker.action = marker.ADD
         marker.scale.x = .3
@@ -89,7 +91,7 @@ class PurePursuit(object):
         marker.scale.z = .8
         marker.color.a = 1.0
         marker.color.r = 1.0
-        marker.color.g = .5
+        marker.color.g = .1
         marker.pose.orientation.w = 1.0
         marker.pose.position.x = x
         marker.pose.position.y = y
@@ -108,8 +110,9 @@ class PurePursuit(object):
         marker.scale.y = self.lookahead*2
         marker.scale.z = .01
         marker.color.a = 1.0
-        marker.color.r = 0.5
-        marker.color.g = .5
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
         marker.pose.orientation.w = 1.0
         marker.pose.position.x = x
         marker.pose.position.y = y
@@ -120,7 +123,7 @@ class PurePursuit(object):
         '''
         print("Receiving new trajectory:", len(msg.poses), "points")
         self.traj_message = msg.poses
-        # self.trajectory.clear()
+        self.trajectory.clear()
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
@@ -129,7 +132,6 @@ class PurePursuit(object):
         self.listener.waitForTransform("map","base_link", rospy.Time(), rospy.Duration(10.0))
         t = self.listener.getLatestCommonTime("map","base_link")
         exp_position, exp_quaternion = self.listener.lookupTransform("map","base_link", t)
-
         #The Car Position
         self.car_pos = np.array(exp_position[:2])
         self.circle()
@@ -138,6 +140,7 @@ class PurePursuit(object):
         row_num, col_num = np.shape(array_of_poses)
 
         #This find the length between all of the segments 
+        
         #TODO - Vectorize this!
         segment_lengths=[]
         for col in range(col_num-1):
@@ -145,8 +148,12 @@ class PurePursuit(object):
             segment_lengths.append(dist)
         closest = np.argmin(segment_lengths)
         try:
-            self.relative_x, self.relative_y = self.find_int(self.car_pos,self.lookahead,array_of_poses[:2,closest],array_of_poses[:2,closest+1])
-            self.draw_marker(self.relative_x, self.relative_y)
+            result_front, result_back = self.find_int(self.car_pos,self.lookahead,array_of_poses[:2,closest],array_of_poses[:2,closest+1])
+            relative_x_front, relative_y_front = self.map_to_car_convert(result_front,exp_position, exp_quaternion )
+            relative_x_back, relative_y_back = self.map_to_car_convert(result_back,exp_position, exp_quaternion )
+            self.draw_marker(relative_x_front, relative_y_front,1)
+            self.draw_marker(relative_x_back, relative_y_back,2)
+            self.relative_x, self.relative_y =  relative_x_front, relative_y_front
         except:
             print("Hey there cowboy, the car is offtrack")
             return
@@ -154,13 +161,20 @@ class PurePursuit(object):
 
         # #Distance to point to drive to
         l = np.sqrt(self.relative_x**2 + self.relative_y**2)
+
+        #Experimental
+        #distnace from car to next seg_end 
+        # start_of_next_seg = np.transpose(array_of_poses[:2,closest])
+        # a,b = self.map_to_car_convert(start_of_next_seg,exp_position, exp_quaternion)
+        # self.draw_marker(a, b,3)
+        # self.lookahead = np.sqrt(a**2 + b**2)
+
+
+
         nu = np.arctan2(self.relative_y, self.relative_x)
         self.drive_cmd.drive.speed = self.speed
         self.drive_cmd.drive.steering_angle = np.arctan(2*self.wheelbase_length*np.sin(nu)/l)
         self.drive_pub.publish(self.drive_cmd)
-
-
-
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
@@ -169,5 +183,5 @@ if __name__=="__main__":
     while not rospy.is_shutdown():
         if pf.traj_message is not None:
             pf.drive_publish()
-        r.sleep()
+        # r.sleep()
     # rospy.spin()
