@@ -97,7 +97,7 @@ class PathPlan(object):
         self.graph = {}
 
         # TWEAKABLE CONSTANTS #
-        num_samples = 10
+        num_samples = 10000
 
         # Wait for initialization
         while self.end_resolved is not True or self.start_resolved is not True or self.map_resolved is not True:
@@ -107,15 +107,20 @@ class PathPlan(object):
         straight_path = self.steer(self.start_point, self.end_point)
         if not self.collision_free(straight_path):
             print("not collision free")
+            print(self.start_point)
             # Run a discrete number of samples
             for i in range(num_samples):
+                print("sampling")
                 z_rand = self.sample()
                 while self.collision(z_rand):
                     z_rand = self.sample()
                 z_nearest = self.nearest(z_rand)
                 # Compute path from newest point to nearest one
+                print("near", z_nearest)
+                print("rand", z_rand)
                 new_path = self.steer(z_nearest, z_rand)
                 if self.collision_free(new_path):
+                    print("new path coll free")
                     # z_new = new_path(T)
                     # End Node: [Initial Node, path]
                     self.graph[z_rand] = [z_nearest, new_path]
@@ -124,6 +129,7 @@ class PathPlan(object):
                     # if not, end RRT
                     if self.collision_free(end_run):
                         self.graph[self.end_point] = [z_rand, end_run]
+                        print("end run:", self.graph)
                         break;
         # the straight-line case
         else:
@@ -184,6 +190,7 @@ class PathPlan(object):
             path_len = dubins.shortest_path(n, rand, self.turning_radius).path_length()
             paths = np.append(paths, path_len)
         # Use np.argmin to find smallest dist
+        print("nearest:", gr[np.argmin(paths)])
         return gr[np.argmin(paths)]
 
     def real2pix(self, point):
@@ -193,7 +200,7 @@ class PathPlan(object):
         ang = self.origin[2]
         
         rot = np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])
-        y = -y
+        #y = -y
         rot = np.append(rot, np.array([[self.origin[0], self.origin[1]]]).T, 1)
         rot = np.append(rot, np.array([[0, 0, 1]]), 0)
 
