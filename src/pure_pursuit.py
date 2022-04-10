@@ -30,8 +30,9 @@ class PurePursuit(object):
         self.marker_pub = rospy.Publisher("/lookahead_intersection", Marker, queue_size=1)
         self.circle_pub = rospy.Publisher("/car_circle", Marker, queue_size=1)
         self.car_pos = np.array([0,0])
+
     def lineseg_dists(self, p, a, b):
-    # Handle case where p is a single point, i.e. 1d array.
+        # Handle case where p is a single point, i.e. 1d array.
         p = np.atleast_2d(p)
         if np.all(a == b):
             return np.linalg.norm(p - a, axis=1)

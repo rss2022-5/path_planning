@@ -21,14 +21,15 @@ class PathPlan(object):
     current car pose.
     """
     def __init__(self):
-        self.odom_topic = rospy.get_param("~odom_topic", "/odom")
+        # self.odom_topic = rospy.get_param("~odom_topic", "/odom")
+        self.odom_topic = "/odom"
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
         self.fake_listen = rospy.Subscriber("/trajectory/current", PoseArray, self.fake_cb)
-        self.click_listen = rospy.Subscriber("/clicked_point", Marker, self.click_cb)
+        # self.click_listen = rospy.Subscriber("/clicked_point", Marker, self.click_cb)
         ## TWEAKABLE ##
         self.step_size = 0.5
         self.turning_radius = 0.4
@@ -70,8 +71,10 @@ class PathPlan(object):
         origin_o = euler_from_quaternion((origin_o.x, origin_o.y,
                                          origin_o.z, origin_o.w))
         self.origin = (origin_p.x, origin_p.y, origin_o[2])
-        #self.origin = (origin_p.x, origin_p.y, origin_o)
         self.grid = np.reshape(data, (self.height, self.width))
+        
+        if not self.map_resolved:
+            rospy.loginfo("Map Initialized")
         self.map_resolved = True
 
     def odom_cb(self, msg):
@@ -81,6 +84,9 @@ class PathPlan(object):
         # THIS MIGHT NEED TO CHANGE TO X INSTEAD OF Y
         _, th, _ = euler_from_quaternion([q.x, q.y, q.z, q.w])
         self.start_point = (x, y, th)
+        
+        if not self.start_resolved:
+            rospy.loginfo("Start Initialized")
         self.start_resolved = True
 
     def goal_cb(self, msg):
@@ -90,6 +96,9 @@ class PathPlan(object):
         # THIS MIGHT NEED TO CHANGE TO X INSTEAD OF Y
         _, th, _ = euler_from_quaternion([q.x, q.y, q.z, q.w])
         self.end_point = (x, y, th)
+
+        if not self.end_resolved:
+            rospy.loginfo("End Initialized")
         self.end_resolved = True
         
     def plan_path(self, start_point, end_point, map):
@@ -101,7 +110,9 @@ class PathPlan(object):
 
         # Wait for initialization
         while self.end_resolved is not True or self.start_resolved is not True or self.map_resolved is not True:
-            pass        
+            pass
+
+        rospy.logwarn("Beginning Path Planning")
 
         # Check if a straight line would solve the optimization
         straight_path = self.steer(self.start_point, self.end_point)
@@ -130,7 +141,7 @@ class PathPlan(object):
                     if self.collision_free(end_run):
                         self.graph[self.end_point] = [z_rand, end_run]
                         print("end run:", self.graph)
-                        break;
+                        break
         # the straight-line case
         else:
             self.graph[self.end_point] = [self.start_point, straight_path]
@@ -157,8 +168,8 @@ class PathPlan(object):
         self.trajectory.publish_viz()
 
     def sample(self):
-        x = np.random.random_sample()*(self.width*self.resolution)
-        y = np.random.random_sample()*(self.height*self.resolution)
+        x = np.random.random_sample()*((self.width - 1)*self.resolution)
+        y = np.random.random_sample()*((self.height - 1)*self.resolution)
         th = np.random.random_sample()*2*np.pi
         return (x, y, th)
 
@@ -182,15 +193,17 @@ class PathPlan(object):
     def nearest(self, rand):
         if len(self.graph) == 0:
             return self.start_point
+        
         # find distance of each point in graph to rand point
-        gr = np.array([])
+        gr = self.graph.keys()
+        print(gr)
         paths = np.array([])
-        for n in self.graph:
-            gr = np.append(gr, n)
+        for n in gr:
+            print(n)
             path_len = dubins.shortest_path(n, rand, self.turning_radius).path_length()
             paths = np.append(paths, path_len)
         # Use np.argmin to find smallest dist
-        print("nearest:", gr[np.argmin(paths)])
+        print("near res", gr[np.argmin(paths)])
         return gr[np.argmin(paths)]
 
     def real2pix(self, point):
@@ -202,7 +215,9 @@ class PathPlan(object):
         rot = np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])
         #y = -y
         rot = np.append(rot, np.array([[self.origin[0], self.origin[1]]]).T, 1)
+        print("append arr", np.array([[self.origin[0], self.origin[1]]]).T)
         rot = np.append(rot, np.array([[0, 0, 1]]), 0)
+        print("rot", rot)
 
         p_matrix = np.array([[x, y, 1]]).T
         rotated = np.dot(rot, p_matrix)
