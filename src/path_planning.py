@@ -30,7 +30,7 @@ class PathPlan(object):
         self.fake_listen = rospy.Subscriber("/trajectory/current", PoseArray, self.fake_cb)
         self.click_listen = rospy.Subscriber("/clicked_point", Marker, self.click_cb)
         ## TWEAKABLE ##
-        self.step_size = 1
+        self.step_size = 0.5
         self.turning_radius = 0.4
 
         # Declare vars
@@ -56,7 +56,9 @@ class PathPlan(object):
         print(point.x, point.y)
                                                  
     def map_cb(self, msg):
-        data = np.array(msg.data, np.double)/100.
+        data = np.array(msg.data, np.double)
+        data = np.where(data < 0, 100, data)
+        data = data/100.0
         data = np.clip(data, 0, 1)
         data = np.where(data > 0.3, 1, 0)
         self.resolution = float(msg.info.resolution)
@@ -68,6 +70,7 @@ class PathPlan(object):
         origin_o = euler_from_quaternion((origin_o.x, origin_o.y,
                                          origin_o.z, origin_o.w))
         self.origin = (origin_p.x, origin_p.y, origin_o[2])
+        #self.origin = (origin_p.x, origin_p.y, origin_o)
         self.grid = np.reshape(data, (self.height, self.width))
         self.map_resolved = True
 
@@ -103,6 +106,7 @@ class PathPlan(object):
         # Check if a straight line would solve the optimization
         straight_path = self.steer(self.start_point, self.end_point)
         if not self.collision_free(straight_path):
+            print("not collision free")
             # Run a discrete number of samples
             for i in range(num_samples):
                 z_rand = self.sample()
@@ -130,6 +134,7 @@ class PathPlan(object):
         curr_x, curr_y, curr_th = self.end_point
         traj = np.array([[curr_x, curr_y, curr_th]])
         while curr != self.start_point:
+            print(self.graph)
             c_parent, c_path = self.graph[curr]
             # Add elements to the trajectory once found
             c_path = np.array(c_path)
@@ -146,8 +151,8 @@ class PathPlan(object):
         self.trajectory.publish_viz()
 
     def sample(self):
-        x = np.random.random_sample()*self.width
-        y = np.random.random_sample()*self.height
+        x = np.random.random_sample()*(self.width*self.resolution)
+        y = np.random.random_sample()*(self.height*self.resolution)
         th = np.random.random_sample()*2*np.pi
         return (x, y, th)
 
@@ -192,7 +197,6 @@ class PathPlan(object):
         rot = np.append(rot, np.array([[self.origin[0], self.origin[1]]]).T, 1)
         rot = np.append(rot, np.array([[0, 0, 1]]), 0)
 
-        print(rot)
         p_matrix = np.array([[x, y, 1]]).T
         rotated = np.dot(rot, p_matrix)
         rotated = rotated/self.resolution
