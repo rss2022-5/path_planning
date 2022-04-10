@@ -70,7 +70,6 @@ class PathPlan(object):
         origin_o = euler_from_quaternion((origin_o.x, origin_o.y,
                                          origin_o.z, origin_o.w))
         self.origin = (origin_p.x, origin_p.y, origin_o[2])
-        #self.origin = (origin_p.x, origin_p.y, origin_o)
         self.grid = np.reshape(data, (self.height, self.width))
         self.map_resolved = True
 
@@ -182,15 +181,17 @@ class PathPlan(object):
     def nearest(self, rand):
         if len(self.graph) == 0:
             return self.start_point
+        
         # find distance of each point in graph to rand point
-        gr = np.array([])
+        gr = self.graph.keys()
+        print(gr)
         paths = np.array([])
-        for n in self.graph:
-            gr = np.append(gr, n)
+        for n in gr:
+            print(n)
             path_len = dubins.shortest_path(n, rand, self.turning_radius).path_length()
             paths = np.append(paths, path_len)
         # Use np.argmin to find smallest dist
-        print("nearest:", gr[np.argmin(paths)])
+        print("near res", gr[np.argmin(paths)])
         return gr[np.argmin(paths)]
 
     def real2pix(self, point):
@@ -202,7 +203,9 @@ class PathPlan(object):
         rot = np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])
         #y = -y
         rot = np.append(rot, np.array([[self.origin[0], self.origin[1]]]).T, 1)
+        print("append arr", np.array([[self.origin[0], self.origin[1]]]).T)
         rot = np.append(rot, np.array([[0, 0, 1]]), 0)
+        print("rot", rot)
 
         p_matrix = np.array([[x, y, 1]]).T
         rotated = np.dot(rot, p_matrix)
