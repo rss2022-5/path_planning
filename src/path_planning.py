@@ -21,14 +21,15 @@ class PathPlan(object):
     current car pose.
     """
     def __init__(self):
-        self.odom_topic = rospy.get_param("~odom_topic", "/odom")
+        # self.odom_topic = rospy.get_param("~odom_topic", "/odom")
+        self.odom_topic = "/odom"
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
         self.fake_listen = rospy.Subscriber("/trajectory/current", PoseArray, self.fake_cb)
-        self.click_listen = rospy.Subscriber("/clicked_point", Marker, self.click_cb)
+        # self.click_listen = rospy.Subscriber("/clicked_point", Marker, self.click_cb)
         ## TWEAKABLE ##
         self.step_size = 0.5
         self.turning_radius = 0.4
@@ -72,6 +73,9 @@ class PathPlan(object):
         self.origin = (origin_p.x, origin_p.y, origin_o[2])
         #self.origin = (origin_p.x, origin_p.y, origin_o)
         self.grid = np.reshape(data, (self.height, self.width))
+        
+        if not self.map_resolved:
+            rospy.loginfo("Map Initialized")
         self.map_resolved = True
 
     def odom_cb(self, msg):
@@ -81,6 +85,9 @@ class PathPlan(object):
         # THIS MIGHT NEED TO CHANGE TO X INSTEAD OF Y
         _, th, _ = euler_from_quaternion([q.x, q.y, q.z, q.w])
         self.start_point = (x, y, th)
+        
+        if not self.start_resolved:
+            rospy.loginfo("Start Initialized")
         self.start_resolved = True
 
     def goal_cb(self, msg):
@@ -90,6 +97,9 @@ class PathPlan(object):
         # THIS MIGHT NEED TO CHANGE TO X INSTEAD OF Y
         _, th, _ = euler_from_quaternion([q.x, q.y, q.z, q.w])
         self.end_point = (x, y, th)
+
+        if not self.end_resolved:
+            rospy.loginfo("End Initialized")
         self.end_resolved = True
         
     def plan_path(self, start_point, end_point, map):
@@ -101,7 +111,9 @@ class PathPlan(object):
 
         # Wait for initialization
         while self.end_resolved is not True or self.start_resolved is not True or self.map_resolved is not True:
-            pass        
+            pass
+
+        rospy.logwarn("Beginning Path Planning")
 
         # Check if a straight line would solve the optimization
         straight_path = self.steer(self.start_point, self.end_point)
@@ -130,7 +142,7 @@ class PathPlan(object):
                     if self.collision_free(end_run):
                         self.graph[self.end_point] = [z_rand, end_run]
                         print("end run:", self.graph)
-                        break;
+                        break
         # the straight-line case
         else:
             self.graph[self.end_point] = [self.start_point, straight_path]
