@@ -16,8 +16,8 @@ class PurePursuit(object):
     """
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic")
-        self.lookahead        = 1.
-        self.speed            = 10.0
+        self.lookahead        = 2 #1.2 Meter works pretty well without velocity modulation
+        self.speed            = 5.0
         self.wrap             = 0
         self.wheelbase_length = 0.325
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
@@ -65,6 +65,7 @@ class PurePursuit(object):
             return None
         #This version of t finds the closest point on the line eg (we dont need this)
         t = max(0, min(1, - b / (2 * a)))
+
         return pee1 + t1 * v, pee1 + t2 * v
     def map_to_car_convert(self, result, exp_position, exp_quaternion):
         """
@@ -130,9 +131,13 @@ class PurePursuit(object):
 
 
     def drive_publish(self):
-        self.listener.waitForTransform("map","base_link", rospy.Time(), rospy.Duration(10.0))
-        t = self.listener.getLatestCommonTime("map","base_link")
-        exp_position, exp_quaternion = self.listener.lookupTransform("map","base_link", t)
+
+        """
+        Change to base_link_pf to do simulation. Or base_link to do normal
+        """
+        self.listener.waitForTransform("map","base_link_pf", rospy.Time(), rospy.Duration(10.0))
+        t = self.listener.getLatestCommonTime("map","base_link_pf")
+        exp_position, exp_quaternion = self.listener.lookupTransform("map","base_link_pf", t)
         #The Car Position
         self.car_pos = np.array(exp_position[:2])
         self.circle()
@@ -160,22 +165,32 @@ class PurePursuit(object):
             return
         
 
-        # #Distance to point to drive to
-        l = np.sqrt(self.relative_x**2 + self.relative_y**2)
-
         #Experimental
         #distnace from car to next seg_end 
-        # start_of_next_seg = np.transpose(array_of_poses[:2,closest])
-        # a,b = self.map_to_car_convert(start_of_next_seg,exp_position, exp_quaternion)
-        # self.draw_marker(a, b,3)
-        # self.lookahead = np.sqrt(a**2 + b**2)
+        try:
+            start_of_next_seg = np.transpose(array_of_poses[:2,closest+2])
+        except:
+            start_of_next_seg = np.transpose(array_of_poses[:2,-1])
+        a,b = self.map_to_car_convert(start_of_next_seg,exp_position, exp_quaternion)
+        new_l = np.sqrt(a**2 + b**2)
+        #Distance to point to drive to
+        l = np.sqrt(self.relative_x**2 + self.relative_y**2)
+        both = np.array([l,new_l])
+        self.draw_marker(a, b,3)
+        l = both[np.argmin(both)]
+        if l==new_l:
+            self.relative_x, self.relative_y = a,b
 
 
 
         nu = np.arctan2(self.relative_y, self.relative_x)
         self.drive_cmd.drive.speed = self.speed
         self.drive_cmd.drive.steering_angle = np.arctan(2*self.wheelbase_length*np.sin(nu)/l)
+        angle_threshold = abs(self.drive_cmd.drive.steering_angle)
+        if angle_threshold>0.13:
+            self.drive_cmd.drive.speed = self.speed*(1.0-angle_threshold)
         self.drive_pub.publish(self.drive_cmd)
+
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
