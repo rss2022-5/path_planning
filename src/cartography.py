@@ -14,11 +14,11 @@ class Map:
         self.collision_radius = float(collision_radius)
         self.discrete_length = discrete_length
 
-        while not self.resolved:
-            pass
-        print(self.get_pixel([0,0]))
-        print(self.get_pixel(self.get_point([1000,-15])))
-        print(self.get_point(self.get_pixel([1000,-15])))
+        # while not self.resolved:
+        #     pass
+        # print(self.get_pixel([0,0]))
+        # print(self.get_pixel(self.get_point([1000,-15])))
+        # print(self.get_point(self.get_pixel([1000,-15])))
 
     def show_map(self):
         cv2.imshow("map", self.map)
@@ -35,8 +35,8 @@ class Map:
         self.discrete_pixels = self.discrete_length/self.resolution
         self.width = int(msg.info.width)
         self.height = int(msg.info.height)
-        print('width', self.width)
-        print('height', self.height)
+        # print('width', self.width)
+        # print('height', self.height)
         # Scale down to 100 to place on a scale from 0-1
         data = np.array(msg.data, np.double)/100.
         # replace any undetermined pixels (negative values) with 1 to indicate occupancy
@@ -97,7 +97,7 @@ class Map:
         p = np.dot(rot, pixel.T * self.resolution)
         
         # Shift by origin position
-        return p+self.origin
+        return p + self.origin
 
     def get_block_coords(self, point):
         pixel = self.get_pixel(point)
