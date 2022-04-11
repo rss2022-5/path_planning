@@ -67,7 +67,7 @@ class LineTrajectory(object):
             return (1.0-t)*self.distances[i] + t*self.distances[i+1]
 
     def addPoint(self, point):
-        print "adding point to trajectory:", point.x, point.y
+        # print "adding point to trajectory:", point.x, point.y
         self.points.append((point.x, point.y))
         self.update_distances()
         self.mark_dirty()
