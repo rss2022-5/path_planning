@@ -10,7 +10,7 @@ class LogFile:
                 file.write(header)
 
             file.write('\n')
-
+    #call this every time you want to log, give it the ros timestamp
     def log(self, time, columns):
         try:
             assert(len(columns) == len(self.headers))
