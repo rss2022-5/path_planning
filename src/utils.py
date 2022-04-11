@@ -126,7 +126,7 @@ class LineTrajectory(object):
 
     def publish_start_point(self, duration=0.0, scale=0.1):
         should_publish = len(self.points) > 0
-        if self.visualize and self.start_pub.get_num_connections() > 0:
+        if True:
             print "Publishing start point"
             marker = Marker()
             marker.header = self.make_header("/map")
@@ -156,7 +156,7 @@ class LineTrajectory(object):
 
     def publish_end_point(self, duration=0.0):
         should_publish = len(self.points) > 1
-        if self.visualize and self.end_pub.get_num_connections() > 0:
+        if True:
             print "Publishing end point"
             marker = Marker()
             marker.header = self.make_header("/map")
@@ -186,7 +186,7 @@ class LineTrajectory(object):
 
     def publish_trajectory(self, duration=0.0):
         should_publish = len(self.points) > 1
-        if self.visualize and self.traj_pub.get_num_connections() > 0:
+        if True:
             print "Publishing trajectory"
             marker = Marker()
             marker.header = self.make_header("/map")

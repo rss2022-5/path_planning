@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 from operator import truediv
 import rospy
 import numpy as np
@@ -10,7 +8,6 @@ import rospkg
 import time, os
 from utils import LineTrajectory
 from tf.transformations import quaternion_matrix, euler_from_quaternion
-import math
 
 class GridSquare:
 
@@ -22,9 +19,6 @@ class GridSquare:
     def __eq__(self, obj):
         return isinstance(obj, GridSquare) and self.x==obj.x and self.y==obj.y
     
-    def __str__(self):
-        return "Gridsquare: ("+self.x+","+self.y+")"
-
     def occupied(self, map):
         if (map[self.y,self.x]==1):
             return True
@@ -36,37 +30,14 @@ class PathPlan(object):
     current car pose.
     """
     def __init__(self):
-        print("Initializing")
         self.odom_topic = rospy.get_param("~odom_topic")
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
-        #self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
-        self.fake_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.fake_cb)
-        # Declare vars
-        self.resolution = None
-        self.width = None
-        self.height = None
-        self.origin = None
-        self.grid = None
-        self.map_resolved = False
-        self.start_point = None
-        self.start_resolved = False
-        self.end_point = None
-        self.end_resolved = False
-
-        #self.publish_path()
-        self.trajectory.addPoint(GridSquare(0,0))
-        self.trajectory.addPoint(GridSquare(0,1))
-        self.trajectory.publish_viz()
-        
-
-    def fake_cb (self, msg):
-        pass
+        self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
 
     def map_cb (self, msg):
-        print("call map_cb")
         #Prepare map representation
         map = np.array(msg.data, np.double)
         map = np.where(map < 0, 100, map)
@@ -74,9 +45,9 @@ class PathPlan(object):
         map = np.clip(map, 0, 1)
         map = np.where(map > 0.5, 1, 0)
         #TODO: Check kernel size
-        # kernel = np.ones((5,5),np.uint8)
-        # map = cv.erode(map, kernel, iterations = 1)
-        # map = cv.dilate(map, kernel, iterations = 1)
+        kernel = np.ones((5,5),np.uint8)
+        map = cv.erode(map, kernel, iterations = 1)
+        map = cv.dilate(map, kernel, iterations = 1)
         #Storing values
         self.resolution = float(msg.info.resolution)
         self.width = int(msg.info.width)
@@ -88,11 +59,9 @@ class PathPlan(object):
         origin_o = euler_from_quaternion((origin_o.x, origin_o.y,
                                          origin_o.z, origin_o.w))
         self.origin = (origin_p.x, origin_p.y, origin_o[2])
-        print("End map callback")
         self.map_resolved = True
 
     def odom_cb(self, msg):
-        #print("call odom_cb")
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
@@ -102,7 +71,6 @@ class PathPlan(object):
         self.start_resolved = True
 
     def goal_cb(self, msg):
-        print("call goal_cb")
         x = msg.pose.position.x
         y = msg.pose.position.y
         q = msg.pose.orientation
@@ -120,147 +88,146 @@ class PathPlan(object):
         rot = np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])
         #y = -y
         rot = np.append(rot, np.array([[self.origin[0], self.origin[1]]]).T, 1)
-        #print("append arr", np.array([[self.origin[0], self.origin[1]]]).T)
+        print("append arr", np.array([[self.origin[0], self.origin[1]]]).T)
         rot = np.append(rot, np.array([[0, 0, 1]]), 0)
-        #print("rot", rot)
+        print("rot", rot)
 
         p_matrix = np.array([[x, y, 1]]).T
         rotated = np.dot(rot, p_matrix)
         rotated = rotated/self.resolution
-        arr = (np.rint(rotated[0]).astype(int), np.rint(rotated[1]).astype(int))
-        return (arr[0], arr[1])
+        return (np.rint(rotated[0]).astype(int), np.rint(rotated[1]).astype(int))
     
     def pixel2real(self, point):
         pass
 
-    def g(self, map_rep, node1, node2):
+    def get_map (self, msg):
+        map = np.reshape(msg.data, (self.height, self.width))
+        for i in map:
+            for j in map[i]:
+                if (map[i][j]>0.5):
+                    map[i][j]=1
+                else:
+                    map[i][j]=0
+        kernel = np.ones((5,5),np.uint8)
+        map = cv.erode(map, kernel, iterations = 1)
+        map = cv.dilate(map, kernel, iterations = 1)
+        return map
+
+    def g(map_rep, node1, node2):
         """
         Returns distance between two nodes
         """
         return 1
 
-    def heuristic(self, map_rep, source_id, node2):
+    def heuristic(map_rep, node1, node2):
         """
         Returns the heuristic for a node
         """
-        return math.sqrt((source_id[0]-node2[0])**2+(source_id[1]-node2[1])**2)
+        return 0
     
-    def generate_adj_nodes(self, map_rep, source):
+    def generate_adj_nodes(map_rep, source):
         #TODO Modify
         adj = []
         try:
-            g = GridSquare(source[0]-1, source[1])
-           #print("Made gridsquare object")
+            g = GridSquare(source.x-1, source.y)
             if (not g.occupied(map_rep)):
-                adj.append((source[0]-1, source[1]))
-            #print("g not occupied")
+                adj.append(g)
         except: pass
         try:
-            g = GridSquare(source[0]+1, source[1])
+            g = GridSquare(source.x+1, source.y)
             if (not g.occupied(map_rep)):
-                adj.append((source[0]+1, source[1]))
+                adj.append(g)
         except: pass
         try:
-            g = GridSquare(source[0], source[1]-1)
+            g = GridSquare(source.x, source.y-1)
             if (not g.occupied(map_rep)):
-                adj.append((source[0], source[1]-1))
+                adj.append(g)
         except: pass
         try:
-            g = GridSquare(source[0], source[1]+1)
+            g = GridSquare(source.x, source.y+1)
             if (not g.occupied(map_rep)):
-                adj.append((source[0], source[1]+1))
+                adj.append(g)
         except: pass
         return adj
     
-    def next_id(self, map_rep, min_f, open, curr_node, node2):
+    def next_id(self, map_rep, min_f, open, node2):
         """
         Return the node with the next shortest f (distance + heuristic)
         """
         min = float("infinity")
         id = None
         for k in open:
-            if (min_f[k]+self.heuristic(map_rep, curr_node, node2)<min):
+            if (min_f[k]+self.heuristic(map_rep,node2)<min):
                 id = k
-                min = min_f[k]+self.heuristic(map_rep, curr_node, node2)
+                min = min_f[k]+self.heuristic(map_rep,node2)
         return id
-    
-    def id_to_tuple(self, test_str):
-        return tuple(map(int, str(test_str)[1:-1].split(', ')))
         
-    def a_star(self, map_rep, node1_id, node2_id):
+    def a_star(self, map_rep, node1, node2):
         """
         Return the shortest path between the two nodes
 
         Parameters:
             map_rep: the result of calling build_internal_representation
-            node1: node representing the start location (id)
-            node2: node representing the end location (id)
+            node1: node representing the start location
+            node2: node representing the end location
 
         Returns:
             a list of node IDs representing the shortest path (in terms of
             distance) from node1 to node2
         """
         # min_f = {k:float("infinity") for k in map_rep}
-        print("node1_id", node1_id)
-        print("node2_id", node2_id)
         inf = float("infinity")
         min_f = {}
-        prev_id = node1_id
-        min_f[node1_id] = 0
+        min_f[node1] = 0
         #Parent hash map matching nodes to their parent IDs
         parent = {}
         #Create set not_visited of node IDs
         visited = set()
         #open list of nodes
-        open = { node1_id }
+        open = { node1 }
         #i is id of the adjacent node. NODES is a hash map of nodes with key values as id
-        while(len(visited)<self.height*self.width):
-            source_id = self.next_id(map_rep, min_f, open, prev_id, node2_id)
-            #print("source_id", source_id)
-            if (not source_id): #If next_id returns None
-                #print("no source")
+        while(len(visited)<len(map_rep)):
+            source = self.next_id(map_rep, min_f, open, node2)
+            if (not source): #If next_id returns None
                 break
-            if (source_id == node2_id):
-                #print("reached node 2")
-                visited.add(node2_id)
+            if (source == node2):
+                visited.add(node2)
                 break
-            adj_nodes = self.generate_adj_nodes(map_rep, source_id)
+            adj_nodes = self.generate_adj_nodes(map_rep, source)
             for adj in adj_nodes:
                 if (adj not in visited):
                     #Check if there isn't yet a minimum distance for the adjacent vertex
-                    if (min_f.get(adj, inf) > min_f[source_id]+self.heuristic(map_rep, source_id, adj)):
+                    if (min_f.get(adj, inf) > min_f[source]+self.heuristic(map_rep, adj)):
                         #Updated minimum distance
                         #g always 1 because pixel next to it always 1?
-                        min_f[adj] = min_f[source_id]+self.heuristic(map_rep, source_id, adj)
-                        parent[adj] = source_id
+                        min_f[adj] = min_f[source]+self.heuristic(map_rep, adj)
+                        parent[adj] = source
                     open.add(adj)
             #Mark source as visited
-            visited.add(source_id)
-            open.remove(source_id)
-            prev_id = source_id
+            visited.add(source)
+            open.remove(source)
+        #Backtrack to get path using parents list
         path = []
-        if (node2_id not in visited):
-            #print("node2_id not in visited")
+        if (node2 not in visited):
             return None
-        current_node_id = node2_id
-        while(current_node_id!=node1_id):
-            path.append(current_node_id)
-            print("Appending")
-            current_node_id = parent[current_node_id]
-        path.append(self.id_to_tuple(current_node_id))
+        current_node = node2
+        while(current_node!=node1):
+            path.append(current_node)
+            current_node = parent[current_node]
+        path.append(current_node)
         return path[::-1]
 
 
     def publish_path(self):
         ## CODE FOR PATH PLANNING ##
-        while(not self.map_resolved or not self.start_resolved or not self.end_resolved):
+        while (self.end_resolved is not True or self.start_resolved is not True or self.map_resolved is not True):
             pass
-        print("Map", self.map)
-        print("Start A star")
-        self.traj = self.a_star(self.map, (int(self.start_point[0][0]),int(self.start_point[1][0])), (int(self.end_point[0][0]),int(self.end_point[1][0])))
-        print("Done w A Star")
-        for p in self.traj:
-            self.trajectory.addPoint(GridSquare(p[0], p[1]))
+        start = GridSquare(self.start_point[0], self.start_point[1])
+        end = GridSquare(self.end_point[0], self.end_point[1])
+        self.traj = self.a_star(map, self.start_point, self.end_point)
+        self.trajectory = LineTrajectory()
+        for gridsquare in self.traj:
+            self.trajectory.addPoint(gridsquare)
         #TODO: Trajectory in real life coords
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
