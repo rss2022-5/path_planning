@@ -102,16 +102,17 @@ class Map:
     def get_block_coords(self, point):
         pixel = self.get_pixel(point)
         
-        block = (pixel/self.discrete_pixels).astype(int)
+        return (pixel/self.discrete_pixels).astype(int)
         
     def get_adjacent_blocks(self, block):
         blocks = []
         for i in [-1, 0, 1]:
             for j in [-1, 0, 1]:
                 new_block = block + np.array([i, j])
-                if new_block[0] < 0 or new_block[0] >= self.width/self.discrete_pixels:
+
+                if new_block[0] < 0 or new_block[0] >= int(self.width/self.discrete_pixels):
                     continue
-                if new_block[1] < 0 or new_block[1] >= self.height/self.discrete_pixels:
+                if new_block[1] < 0 or new_block[1] >= int(self.height/self.discrete_pixels):
                     continue
                 blocks.append( new_block )
         
