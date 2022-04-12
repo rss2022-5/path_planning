@@ -17,7 +17,7 @@ class PurePursuit(object):
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic")
         self.lookahead        = 2 #1.2 Meter works pretty well without velocity modulation
-        self.speed            = 5.0
+        self.speed            = 5.0 #RESET THIS for testing!!!
         self.wrap             = 0
         self.wheelbase_length = 0.325
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
@@ -30,6 +30,9 @@ class PurePursuit(object):
         self.marker_pub = rospy.Publisher("/lookahead_intersection", Marker, queue_size=1)
         self.circle_pub = rospy.Publisher("/car_circle", Marker, queue_size=1)
         self.car_pos = np.array([0,0])
+
+        #logs distances from line over time, plus use final time - initial time to get time to node
+        self.log_error = LogFile("/home/racecar/distancesPPlog1.csv",["time","distance"])
 
     def lineseg_dists(self, p, a, b):
         # Handle case where p is a single point, i.e. 1d array.
