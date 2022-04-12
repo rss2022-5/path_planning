@@ -66,8 +66,10 @@ class PathPlan:
         self.end_resolved = False
         self.graph = None
 
-        self.log_trajectories = LogFile("/home/racecar/trajectory_log1.csv",["trajectories"])
-        self.log_distances = LogFile("/home/racecar/distance_log1.csv",["distances"])
+        self.logging = False
+        if self.logging:
+            self.log_trajectories = LogFile("/home/racecar/trajectory_log1.csv",["trajectories"])
+            self.log_distances = LogFile("/home/racecar/distance_log1.csv",["distances"])
 
 
     def odom_cb(self, msg):
@@ -207,8 +209,9 @@ class PathPlan:
         self.traj_pub.publish(self.trajectory.toPoseArray())
 
         #log the distance of the path + the trajectory
-        self.log_distances.log(str(rospy.get_time()),[self.trajectory.update_distances()])
-        self.trajectory.save("/home/racecar/trajectory_log_" + str(rospy.get_time())+ ".csv")
+        if self.logging:
+            self.log_distances.log(str(rospy.get_time()),[self.trajectory.update_distances()])
+            self.trajectory.save("/home/racecar/trajectory_log_" + str(rospy.get_time())+ ".csv")
 
 
     def steer(self, from_node, to_node):
