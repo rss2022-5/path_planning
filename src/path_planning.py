@@ -10,6 +10,7 @@ import rospkg
 import time, os
 from tf.transformations import quaternion_matrix, euler_from_quaternion
 from utils import LineTrajectory
+from log_file import LogFile
 
 from visualization_tools import *
 import cartography
@@ -64,6 +65,10 @@ class PathPlan:
         self.end_point = None
         self.end_resolved = False
         self.graph = None
+
+        self.log_trajectories = LogFile("/home/racecar/trajectory_log1.csv",["trajectories"])
+        self.log_distances = LogFile("/home/racecar/distance_log1.csv",["distances"])
+
 
     def odom_cb(self, msg):
         x = msg.pose.pose.position.x
@@ -201,7 +206,12 @@ class PathPlan:
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
 
-    def steer(self, from_node, to_node):
+        #log the distance of the path + the trajectory
+        self.log_distances.log(str(rospy.get_time()),[self.trajectory.update_distances()])
+        self.trajectory.save("/home/racecar/trajectory_log_" + str(rospy.get_time())+ ".csv")
+
+
+    def steer(self, near, rand):
         """
             returns a smoothed set of poses between two endpoints
             self.step_size is the distance between these interim poses

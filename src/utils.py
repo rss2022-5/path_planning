@@ -44,6 +44,7 @@ class LineTrajectory(object):
                 p1 = self.points[i]
                 delta = np.array([p0[0]-p1[0],p0[1]-p1[1]])
                 self.distances.append(self.distances[i-1] + np.linalg.norm(delta))
+        return self.distances[-1]
 
     def distance_to_end(self, t):
         if not len(self.points) == len(self.distances):
