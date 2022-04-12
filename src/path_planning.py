@@ -72,13 +72,14 @@ class PathPlan(object):
         map = map/100.0
         map = np.clip(map, 0, 1)
         map = np.where(map > 0.5, 1, 0)
+        #TODO: Check kernel size
+        # kernel = np.ones((5,5),np.uint8)
+        # map = cv.erode(map, kernel, iterations = 1)
+        # map = cv.dilate(map, kernel, iterations = 1)
         #Storing values
         self.resolution = float(msg.info.resolution)
         self.width = int(msg.info.width)
         self.height = int(msg.info.height)
-        r = int(2.* 10 / self.resolution)
-        kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (r, r))
-        map = cv.dilate(map, kernel)
         self.map = np.reshape(map, (self.height, self.width))
         # the real world pose of the origin of the map [m, m, rad]
         origin_p = msg.info.origin.position
