@@ -138,9 +138,9 @@ class PurePursuit(object):
         """
         Change to base_link_pf to do simulation. Or base_link to do normal
         """
-        self.listener.waitForTransform("map","base_link_pf", rospy.Time(), rospy.Duration(10.0))
-        t = self.listener.getLatestCommonTime("map","base_link_pf")
-        exp_position, exp_quaternion = self.listener.lookupTransform("map","base_link_pf", t)
+        self.listener.waitForTransform("map","base_link", rospy.Time(), rospy.Duration(10.0))
+        t = self.listener.getLatestCommonTime("map","base_link")
+        exp_position, exp_quaternion = self.listener.lookupTransform("map","base_link", t)
         #The Car Position
         self.car_pos = np.array(exp_position[:2])
         self.circle()
@@ -155,7 +155,8 @@ class PurePursuit(object):
         for col in range(col_num-1):
             dist = self.lineseg_dists(self.car_pos,array_of_poses[:2,col], array_of_poses[:2,col+1])
             segment_lengths.append(dist)
-        closest = np.argmin(segment_lengths)
+        # closest = np.argmin(segment_lengths)
+        closest = np.argmin(np.abs(np.array(segment_lengths) - self.lookahead))
         try:
             result_front, result_back = self.find_int(self.car_pos,self.lookahead,array_of_poses[:2,closest],array_of_poses[:2,closest+1])
             relative_x_front, relative_y_front = self.map_to_car_convert(result_front,exp_position, exp_quaternion )
@@ -171,13 +172,16 @@ class PurePursuit(object):
         #Experimental
         #distnace from car to next seg_end 
         try:
-            start_of_next_seg = np.transpose(array_of_poses[:2,closest+2])
+            start_of_next_seg = np.transpose(array_of_poses[:2,closest+int(self.lookahead*4)])
         except:
             start_of_next_seg = np.transpose(array_of_poses[:2,-1])
+        
+        
+        l = np.sqrt(self.relative_x**2 + self.relative_y**2)
         a,b = self.map_to_car_convert(start_of_next_seg,exp_position, exp_quaternion)
         new_l = np.sqrt(a**2 + b**2)
         #Distance to point to drive to
-        l = np.sqrt(self.relative_x**2 + self.relative_y**2)
+        
         both = np.array([l,new_l])
         self.draw_marker(a, b,3)
         l = both[np.argmin(both)]
@@ -189,10 +193,21 @@ class PurePursuit(object):
         nu = np.arctan2(self.relative_y, self.relative_x)
         self.drive_cmd.drive.speed = self.speed
         self.drive_cmd.drive.steering_angle = np.arctan(2*self.wheelbase_length*np.sin(nu)/l)
-        angle_threshold = abs(self.drive_cmd.drive.steering_angle)
-        if angle_threshold>0.13:
+
+        #Solved an issue where drive angle was -1 --> Stopped car
+        angle_threshold = np.clip(abs(self.drive_cmd.drive.steering_angle), -0.36, 0.36)
+
+        #If we are making a sharp turn, might be nice to slow down a bit. 
+        if angle_threshold>0.25:
             self.drive_cmd.drive.speed = self.speed*(1.0-angle_threshold)
+        
+        #Added in way for car to stop at the end
+        safety = 0.5
+        last_point = np.transpose(array_of_poses[:2,-1])
+        if np.linalg.norm(last_point-self.car_pos)<safety:
+            self.drive_cmd.drive.speed = 0
         self.drive_pub.publish(self.drive_cmd)
+
 
 
 if __name__=="__main__":
