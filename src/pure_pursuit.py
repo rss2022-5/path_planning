@@ -141,9 +141,9 @@ class PurePursuit(object):
         """
         Change to base_link_pf to do simulation. Or base_link to do normal
         """
-        self.listener.waitForTransform("map","base_link", rospy.Time(), rospy.Duration(10.0))
-        t = self.listener.getLatestCommonTime("map","base_link")
-        exp_position, exp_quaternion = self.listener.lookupTransform("map","base_link", t)
+        self.listener.waitForTransform("map","base_link_pf", rospy.Time(), rospy.Duration(10.0))
+        t = self.listener.getLatestCommonTime("map","base_link_pf")
+        exp_position, exp_quaternion = self.listener.lookupTransform("map","base_link_pf", t)
         #The Car Position
         self.car_pos = np.array(exp_position[:2])
         self.circle()
