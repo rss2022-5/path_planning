@@ -211,7 +211,7 @@ class PathPlan:
         self.trajectory.save("/home/racecar/trajectory_log_" + str(rospy.get_time())+ ".csv")
 
 
-    def steer(self, near, rand):
+    def steer(self, from_node, to_node):
         """
             returns a smoothed set of poses between two endpoints
             self.step_size is the distance between these interim poses
