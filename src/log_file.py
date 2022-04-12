@@ -1,6 +1,8 @@
 
 class LogFile:
     def __init__(self, filename, headers):
+        #headers should be an array of headers
+        #filename should just be a name, string
         self.filename = filename
         self.headers = headers
         with open(self.filename, "w") as file:
@@ -22,7 +24,7 @@ class LogFile:
             file.write(time)
             for col in columns:
                 file.write(",")
-                file.write(col)
+                file.write(str(col))
 
             file.write('\n')
 
