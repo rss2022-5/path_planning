@@ -41,6 +41,7 @@ class PathPlan:
         # 1500 is too slow to reasonably run with RRT+ -- takes ~3 minutes to run but produces significantly more optimal results
         # 1500 is too slow to reasonably run with RRT* -- takes ~4 minutes
         self.num_samples = 250
+        # decrease this for more performance
         self.grid_scale = 1.5
 
         self.odom_topic = rospy.get_param("~odom_topic", "/odom")
@@ -170,6 +171,8 @@ class PathPlan:
                         if steal_dist < graph[point][3] and self.collision_free(steal_path):
                             # rospy.logwarn("Steal")
                             graph[point] = [z_rand, steal_path, steal_length, steal_dist]
+
+                            # TODO: Update children's edge lengths too! can't believe I forgot this
 
 
 

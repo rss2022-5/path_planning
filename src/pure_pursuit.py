@@ -16,9 +16,9 @@ class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
     """
     def __init__(self):
-        self.odom_topic       = rospy.get_param("~odom_topic")
+        self.odom_topic       = rospy.get_param("~odom_topic", "/odom")
         # self.car_frame        = "base_link_pf"
-        self.car_frame        = "base_link"
+        self.car_frame        = "base_link" # TODO: Link to rosparam
         self.lookahead        = 2. #1.2 Meter works pretty well without velocity modulation
         self.stop_distance    = 0.5 # Make sure this is less than lookahead!
         # self.lookahead        = 2 #1.2 Meter works pretty well without velocity modulation
@@ -58,34 +58,42 @@ class PurePursuit(object):
         # use hypot for Pythagoras to improve accuracy
         return np.hypot(h, c)
 
-    def segment_min_distance(self, p, a, b):
-        # Handle case where p is a single point, i.e. 1d array.
-        # a and b are endpoints
-        # returns the minimum distance from the point to the line
-        # (as if the line were infinite)
-
+    def segment_closest_point(self, p, a, b):
+        # Similar to lineseg_dists, but catches case where the closest point on
+        # the infinite line is not on the line segment
+        # TODO: this uhh doesnt work
         p = np.atleast_2d(p)
+        a = np.array(a)
+        b = np.array(b)
+        # catch degenerate line segment-- closest point is the only point
         if np.all(a == b):
-            return np.linalg.norm(p - a, axis=1)
-        # normalized tangent vector
-        d = np.divide(b - a, np.linalg.norm(b - a))
-        # signed parallel distance components
-        s = np.dot(a - p, d)
-        t = np.dot(p - b, d)
-        # clamped parallel distance
-        h = np.maximum.reduce([s, t, np.zeros(len(p))])
-        # perpendicular distance component, as before
-        # note that for the 3D case these will be vectors
-        c = np.cross(p - a, d)
-        # use hypot for Pythagoras to improve accuracy
-        return np.hypot(h, c)
+            return a
 
-    def segment_line_max(self, p, a, b):
-        x1, y1 = map_to_car_convert()
-        l1 = np.sqrt(x1**2 + y1**2)
+        # Code copied from uhh stack overflow
+        # https://stackoverflow.com/questions/28931007/how-to-find-the-closest-point-on-a-line-segment-to-an-arbitrary-point
+        d = np.array(b - a)
 
-        x2, y2 = map_to_car_convert()
-        l2 = np.sqrt(x2**2 + y2**2)
+        d2 = np.dot(d, d.T)
+        # Project point onto the line (will only have an x coordinate in this 1D space)
+        nx = ((p - a) * d ) / d2
+        
+        # clamp the x coordinate to [0,1) too bind it to the line segment
+        nx = np.clip(nx, 0, 1)
+        
+        #convert back to real-world space
+        return a + d*nx
+
+    def segment_min_distance(self, p, a, b):
+        return np.linalg.norm( self.segment_closest_point(p,a,b) - p, axis=1 )
+        
+
+    def segment_max_distance(self,p, a, b):
+        # Find the distance from the car to both endpoints and return whichever is greater
+        # x1, y1 = self.map_to_car_convert(a, self.exp_position, self.exp_quaternion)
+        l1 = np.linalg.norm(a-p, axis=1)
+
+        # x2, y2 = self.map_to_car_convert(a, self.exp_position, self.exp_quaternion)
+        l2 = np.linalg.norm(b-p, axis=1)
 
         return max(l1, l2)
 
@@ -236,6 +244,7 @@ class PurePursuit(object):
 
             if result == None:
                 rospy.logwarn("No intersection found")
+                return None
 
             result_front, result_back = result
 
@@ -281,10 +290,13 @@ class PurePursuit(object):
         # Find distance to endpoint
         x, y = self.map_to_car_convert(self.trajectory.points[-1], self.exp_position, self.exp_quaternion)
         l = np.sqrt(x**2 + y**2)
+
+        # Stop if we're close
         if l < self.stop_distance:
             self.drive_stop()
             return
         
+        # Else, find nearest intersection and get there
         target_point = self.find_intersections_all()
         if not target_point is None:
             self.drive_toward_point(target_point)
