@@ -179,10 +179,15 @@ class PathPlan:
 
         # Search backward for the shortest path
         # Add end point to temp trajectory
-        curr = self.end_point
-        if not curr in graph.keys():
+        if not self.end_point in graph.keys():
             rospy.logerr("No path produced by RRT")
             return
+
+        if self.end_point == self.start_point:
+            rospy.logerr("what")
+            return
+
+        curr = self.end_point
 
         curr_x, curr_y, curr_th = self.end_point
         traj = np.array([[curr_x, curr_y, curr_th]])
@@ -190,9 +195,15 @@ class PathPlan:
         while curr != self.start_point:
             # print(self.graph)
             c_parent, c_path, l,total_path = graph[curr]
+            if c_parent is None:
+                break
             # Add elements to the temp trajectory once found
             c_path = np.array(c_path)
-            traj = np.concatenate((c_path, traj))
+            try:
+                traj = np.concatenate((c_path, traj))
+            except:
+                print(graph[curr])
+                print(traj)
             curr = c_parent
 
         # Create the trajectory by adding all points

@@ -5,6 +5,7 @@ import numpy as np
 import time
 import utils
 import tf
+import traceback
 
 from geometry_msgs.msg import PoseArray, PoseStamped
 from visualization_msgs.msg import Marker
@@ -16,8 +17,12 @@ class PurePursuit(object):
     """
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic")
-        self.lookahead        = 2 #1.2 Meter works pretty well without velocity modulation
-        self.speed            = 5.0
+        # self.car_frame        = "base_link_pf"
+        self.car_frame        = "base_link"
+        self.lookahead        = 2. #1.2 Meter works pretty well without velocity modulation
+        self.stop_distance    = 0.5 # Make sure this is less than lookahead!
+        # self.lookahead        = 2 #1.2 Meter works pretty well without velocity modulation
+        self.speed            = 2.0
         self.wrap             = 0
         self.wheelbase_length = 0.325
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
@@ -33,6 +38,10 @@ class PurePursuit(object):
 
     def lineseg_dists(self, p, a, b):
         # Handle case where p is a single point, i.e. 1d array.
+        # a and b are endpoints
+        # returns the minimum distance from the point to the line
+        # (as if the line were infinite)
+
         p = np.atleast_2d(p)
         if np.all(a == b):
             return np.linalg.norm(p - a, axis=1)
@@ -49,7 +58,38 @@ class PurePursuit(object):
         # use hypot for Pythagoras to improve accuracy
         return np.hypot(h, c)
 
-    def find_int(self, Q,r,pee1,pee2):
+    def segment_min_distance(self, p, a, b):
+        # Handle case where p is a single point, i.e. 1d array.
+        # a and b are endpoints
+        # returns the minimum distance from the point to the line
+        # (as if the line were infinite)
+
+        p = np.atleast_2d(p)
+        if np.all(a == b):
+            return np.linalg.norm(p - a, axis=1)
+        # normalized tangent vector
+        d = np.divide(b - a, np.linalg.norm(b - a))
+        # signed parallel distance components
+        s = np.dot(a - p, d)
+        t = np.dot(p - b, d)
+        # clamped parallel distance
+        h = np.maximum.reduce([s, t, np.zeros(len(p))])
+        # perpendicular distance component, as before
+        # note that for the 3D case these will be vectors
+        c = np.cross(p - a, d)
+        # use hypot for Pythagoras to improve accuracy
+        return np.hypot(h, c)
+
+    def segment_line_max(self, p, a, b):
+        x1, y1 = map_to_car_convert()
+        l1 = np.sqrt(x1**2 + y1**2)
+
+        x2, y2 = map_to_car_convert()
+        l2 = np.sqrt(x2**2 + y2**2)
+
+        return max(l1, l2)
+
+    def find_int(self, Q, r, pee1, pee2):
         v = pee2-pee1
         a = np.dot(v,v)
         b = 2 * np.dot(v,pee1 - Q)
@@ -60,13 +100,14 @@ class PurePursuit(object):
         sqrt_disc = np.sqrt(disc)
         t1 = (-b + sqrt_disc) / (2 * a)
         t2 = (-b - sqrt_disc) / (2 * a)
-        #TODO Add in and functionality - if both are? i think
+        # TODO Add in and functionality - if both are? i think
         if not (0 <= t1 <= 1 or 0 <= t2 <= 1):
             return None
-        #This version of t finds the closest point on the line eg (we dont need this)
+        # This version of t finds the closest point on the line eg (we dont need this)
         t = max(0, min(1, - b / (2 * a)))
 
         return pee1 + t1 * v, pee1 + t2 * v
+    
     def map_to_car_convert(self, result, exp_position, exp_quaternion):
         """
         result = [x,y] from math calc
@@ -129,73 +170,129 @@ class PurePursuit(object):
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
-
-    def drive_publish(self):
-
+    def drive_stop(self):
         """
-        Change to base_link_pf to do simulation. Or base_link to do normal
+        Stop the car
         """
-        self.listener.waitForTransform("map","base_link_pf", rospy.Time(), rospy.Duration(10.0))
-        t = self.listener.getLatestCommonTime("map","base_link_pf")
-        exp_position, exp_quaternion = self.listener.lookupTransform("map","base_link_pf", t)
+        self.drive_cmd.drive.speed = 0
+        self.drive_pub.publish(self.drive_cmd)
+    
+    def drive_toward_point(self, point):
+        """
+        Textbook implementation of Pure Pursuit
+
+        This function includes any slowing down or fancy business we want to do
+        This would also be a good place to modulate the lookahead distance
+        """
+
+        relative_x, relative_y = self.map_to_car_convert(point,self.exp_position, self.exp_quaternion )
+
+
+        # This number should always equal lookahead distance
+        l = np.sqrt(relative_x**2 + relative_y**2)        
+
+        # get relative angle to target intersection
+        nu = np.arctan2(relative_y, relative_x)
+
+        delta = np.arctan(2*self.wheelbase_length*np.sin(nu)/l)
+        
+        self.drive_cmd.drive.speed = self.speed
+        self.drive_cmd.drive.steering_angle = delta
+        # if abs(delta)>0.13:
+        #     self.drive_cmd.drive.speed = self.speed*(1.0-angle_threshold)
+        self.drive_pub.publish(self.drive_cmd)
+
+    def fetch_position(self):
+        # Get and plot positions
+        self.listener.waitForTransform("map",self.car_frame, rospy.Time(), rospy.Duration(10.0))
+        t = self.listener.getLatestCommonTime("map",self.car_frame)
+        self.exp_position, self.exp_quaternion = self.listener.lookupTransform("map",self.car_frame, t)
         #The Car Position
-        self.car_pos = np.array(exp_position[:2])
+        self.car_pos = np.array(self.exp_position[:2])
         self.circle()
+
+    def find_intersection(self):
         #Make it a numpy array where first row is x value, second row is y value
-        array_of_poses = np.transpose(np.array([[p.position.x, p.position.y] for p in self.traj_message]))
+        array_of_poses = np.array([[p.position.x, p.position.y] for p in self.traj_message]).T
         row_num, col_num = np.shape(array_of_poses)
 
-        #This find the length between all of the segments 
-        
+        #This find the length between all of the segments         
         #TODO - Vectorize this!
         segment_lengths=[]
+
         for col in range(col_num-1):
             dist = self.lineseg_dists(self.car_pos,array_of_poses[:2,col], array_of_poses[:2,col+1])
             segment_lengths.append(dist)
-        closest = np.argmin(segment_lengths)
+        
+        if len(segment_lengths) == 0:
+            rospy.logwarn("Empty Trajectory")
+            return None
+        # index of point beginning the closest segment
+        closest = np.argmin(np.abs(np.array(segment_lengths) - self.lookahead))
+
         try:
-            result_front, result_back = self.find_int(self.car_pos,self.lookahead,array_of_poses[:2,closest],array_of_poses[:2,closest+1])
-            relative_x_front, relative_y_front = self.map_to_car_convert(result_front,exp_position, exp_quaternion )
-            relative_x_back, relative_y_back = self.map_to_car_convert(result_back,exp_position, exp_quaternion )
+            # find intersctions on the single closest line segment
+            result = self.find_int(self.car_pos,self.lookahead,array_of_poses[:2,closest],array_of_poses[:2,closest+1])
+
+            if result == None:
+                rospy.logwarn("No intersection found")
+
+            result_front, result_back = result
+
+            # plotting intersections
+            relative_x_front, relative_y_front = self.map_to_car_convert(result_front,self.exp_position, self.exp_quaternion )
+            relative_x_back, relative_y_back = self.map_to_car_convert(result_back,self.exp_position, self.exp_quaternion )
             self.draw_marker(relative_x_front, relative_y_front,1)
             self.draw_marker(relative_x_back, relative_y_back,2)
+            
+            # save for future use
             self.relative_x, self.relative_y =  relative_x_front, relative_y_front
-        except:
-            print("Hey there cowboy, the car is offtrack")
+        except Exception as e:
+            rospy.logerr(traceback.format_exc())
+            rospy.logerr(e)
+            rospy.logwarn("Hey there cowboy, the car is offtrack")
+            return None
+
+        return result_front
+
+    def find_intersections_all(self):
+        # Make it a numpy array where first row is x value, second row is y value
+        array_of_poses = np.array([[p.position.x, p.position.y] for p in self.traj_message]).T
+        row_num, col_num = np.shape(array_of_poses)
+
+        for col in range(col_num-1):
+            dist = self.segment_min_distance(self.car_pos,array_of_poses[:2,col], array_of_poses[:2,col+1])
+            dist = self.segment_max_distance(self.car_pos,array_of_poses[:2,col], array_of_poses[:2,col+1])
+            segment_lengths.append(dist)
+        
+        if len(segment_lengths) == 0:
+            rospy.logwarn("Empty Trajectory")
+            return None
+        # index of point beginning the closest segment
+
+    def drive_publish(self):
+        """
+        Change to base_link_pf to do simulation. Or base_link to do normal
+        """
+
+        # retrieve and store local position of the car
+        self.fetch_position()
+
+        # Find distance to endpoint
+        x, y = self.map_to_car_convert(self.trajectory.points[-1], self.exp_position, self.exp_quaternion)
+        l = np.sqrt(x**2 + y**2)
+        if l < self.stop_distance:
+            self.drive_stop()
             return
         
-
-        #Experimental
-        #distnace from car to next seg_end 
-        try:
-            start_of_next_seg = np.transpose(array_of_poses[:2,closest+2])
-        except:
-            start_of_next_seg = np.transpose(array_of_poses[:2,-1])
-        a,b = self.map_to_car_convert(start_of_next_seg,exp_position, exp_quaternion)
-        new_l = np.sqrt(a**2 + b**2)
-        #Distance to point to drive to
-        l = np.sqrt(self.relative_x**2 + self.relative_y**2)
-        both = np.array([l,new_l])
-        self.draw_marker(a, b,3)
-        l = both[np.argmin(both)]
-        if l==new_l:
-            self.relative_x, self.relative_y = a,b
-
-
-
-        nu = np.arctan2(self.relative_y, self.relative_x)
-        self.drive_cmd.drive.speed = self.speed
-        self.drive_cmd.drive.steering_angle = np.arctan(2*self.wheelbase_length*np.sin(nu)/l)
-        angle_threshold = abs(self.drive_cmd.drive.steering_angle)
-        if angle_threshold>0.13:
-            self.drive_cmd.drive.speed = self.speed*(1.0-angle_threshold)
-        self.drive_pub.publish(self.drive_cmd)
-
+        target_point = self.find_intersections_all()
+        if not target_point is None:
+            self.drive_toward_point(target_point)
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
     pf = PurePursuit()
-    r=rospy.Rate(10)
+    # r=rospy.Rate(20)
     while not rospy.is_shutdown():
         if pf.traj_message is not None:
             pf.drive_publish()
