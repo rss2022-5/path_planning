@@ -31,12 +31,14 @@ class PurePursuit(object):
         self.marker_pub = rospy.Publisher("/lookahead_intersection", Marker, queue_size=1)
         self.circle_pub = rospy.Publisher("/car_circle", Marker, queue_size=1)
         self.car_pos = np.array([0,0])
+        self.fake_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.fake_cb)
 
         #logs distances from line over time, plus use final time - initial time to get time to node
         self.ERROR = 0 #flag for turning error logging on or off. If 1, on, 0 off
         if (self.ERROR == 1):
             self.log_error = LogFile("/home/racecar/distancesPPlog1.csv",["time","distance"])
-
+    def fake_cb (self, msg):
+        pass
     def lineseg_dists(self, p, a, b):
         # Handle case where p is a single point, i.e. 1d array.
         p = np.atleast_2d(p)
