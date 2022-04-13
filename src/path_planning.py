@@ -274,7 +274,7 @@ class PathPlan(object):
         #TODO: Trajectory in real life coords
         # publish trajectory
         if (self.ERROR == 1):
-             self.log_distances.log(str(rospy.get_time()-self.time),[self.trajectory.update_distances()])
+             self.log_distances.log(str(rospy.get_time()-self.time),[self.trajectory.distances[-1]])
              traj_log = "/home/racecar/trajectory_AStar_1-1_log_" + str(rospy.get_time())+ ".csv"
              self.trajectory.save(traj_log)
              #1-2: trajectory 1, Log 2
