@@ -12,6 +12,7 @@ from utils import LineTrajectory
 from tf.transformations import quaternion_matrix, euler_from_quaternion
 import cartography
 import math
+from log_file import LogFile
 
 class GridSquare:
 
@@ -57,6 +58,12 @@ class PathPlan(object):
         self.end_point = None
         self.end_resolved = False
 
+        self.ERROR = 1 #flag for turning error logging on or off. If 1, on, 0 off
+        
+        if (self.ERROR == 1):
+        #      self.log_trajectories = LogFile("/home/racecar/trajectory_A_star_log1-1.csv")
+             #1-2 : Traj 1, Log 2
+             self.log_distances = LogFile("/home/racecar/distance_log_AStar_1-1.csv",["distances"])
         self.publish_path()
         
         
@@ -265,6 +272,11 @@ class PathPlan(object):
             self.trajectory.addPoint(GridSquare(p[0], p[1]))
         #TODO: Trajectory in real life coords
         # publish trajectory
+        if (self.ERROR == 1):
+             self.log_distances.log(str(rospy.get_time()),[self.trajectory.update_distances()])
+             traj_log = LogFile("/home/racecar/trajectory_AStar_1-1_log_" + str(rospy.get_time())+ ".csv")
+             self.trajectory.save(traj_log)
+             #1-2: trajectory 1, Log 2
         self.traj_pub.publish(self.trajectory.toPoseArray())
         # visualize trajectory Markers
         self.trajectory.publish_viz()

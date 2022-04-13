@@ -22,7 +22,7 @@ class LogFile:
             file.write(time)
             for col in columns:
                 file.write(",")
-                file.write(col)
+                file.write(str(col))
 
             file.write('\n')
 
