@@ -17,8 +17,8 @@ class PurePursuit(object):
     """
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic")
-        self.lookahead        = 2 #1.2 Meter works pretty well without velocity modulation
-        self.speed            = 0.5 #RESET THIS for testing!!!
+        self.lookahead        = 1. #1.2 Meter works pretty well without velocity modulation
+        self.speed            = 2.0 #RESET THIS for testing!!!
         self.wrap             = 0
         self.wheelbase_length = 0.325
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
@@ -36,7 +36,7 @@ class PurePursuit(object):
         #logs distances from line over time, plus use final time - initial time to get time to node
         self.ERROR = 1 #flag for turning error logging on or off. If 1, on, 0 off
         if (self.ERROR == 1):
-            self.log_error = LogFile("/home/racecar/distancesPPlog1.csv",["time","distance"])
+            self.log_error = LogFile("/home/racecar/distancesPPlog1.csv",["distance"])
     def fake_cb (self, msg):
         pass
     def lineseg_dists(self, p, a, b):
