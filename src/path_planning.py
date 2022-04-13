@@ -264,6 +264,7 @@ class PathPlan(object):
         ## CODE FOR PATH PLANNING ##
         while(not self.map_resolved or not self.start_resolved or not self.end_resolved):
             pass
+        self.time = rospy.get_time()
         print("self.start_point", self.start_point)
         print("Start A star")
         self.traj = self.a_star(self.map, (int(self.start_point[0]),int(self.start_point[1])), (int(self.end_point[0]),int(self.end_point[1])))
@@ -273,8 +274,8 @@ class PathPlan(object):
         #TODO: Trajectory in real life coords
         # publish trajectory
         if (self.ERROR == 1):
-             self.log_distances.log(str(rospy.get_time()),[self.trajectory.update_distances()])
-             traj_log = LogFile("/home/racecar/trajectory_AStar_1-1_log_" + str(rospy.get_time())+ ".csv")
+             self.log_distances.log(str(rospy.get_time()-self.time),[self.trajectory.update_distances()])
+             traj_log = "/home/racecar/trajectory_AStar_1-1_log_" + str(rospy.get_time())+ ".csv"
              self.trajectory.save(traj_log)
              #1-2: trajectory 1, Log 2
         self.traj_pub.publish(self.trajectory.toPoseArray())
