@@ -16,7 +16,7 @@ class PurePursuit(object):
     """
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic")
-        self.lookahead        = 1.
+        self.lookahead        = 1.0
         self.speed            = 10.0
         self.wrap             = 0
         self.wheelbase_length = 0.325
