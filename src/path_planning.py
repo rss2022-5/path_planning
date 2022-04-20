@@ -65,10 +65,10 @@ class PathPlan:
         self.end_point = None
         self.end_resolved = False
         self.graph = None
-        self.ERROR = 1 #flag for turning error logging on or off. If 1, on, 0 off
+        # self.ERROR = 1 #flag for turning error logging on or off. If 1, on, 0 off
         
-        if (self.ERROR == 1):
-             self.log_distances = LogFile("/home/racecar/distance_log3.csv",["distances"])
+        # if (self.ERROR == 1):
+        #      self.log_distances = LogFile("/home/racecar/distance_log3.csv",["distances"])
 
         self.fake_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.fake_cb)
 
@@ -213,9 +213,9 @@ class PathPlan:
         self.traj_pub.publish(self.trajectory.toPoseArray())
 
         #log the distance of the path + the trajectory
-        if (self.ERROR == 1):
-             self.log_distances.log(str(rospy.get_time()-self.time),[self.trajectory.update_distances()])
-             self.trajectory.save("/home/racecar/trajectory_log_" + str(rospy.get_time()-self.time)+ ".csv")
+        # if (self.ERROR == 1):
+        #      self.log_distances.log(str(rospy.get_time()-self.time),[self.trajectory.update_distances()])
+        #      self.trajectory.save("/home/racecar/trajectory_log_" + str(rospy.get_time()-self.time)+ ".csv")
 
 
     def steer(self, from_node, to_node):
