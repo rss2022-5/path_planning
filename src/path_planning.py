@@ -65,12 +65,15 @@ class PathPlan:
         self.end_point = None
         self.end_resolved = False
         self.graph = None
-        self.ERROR = 0 #flag for turning error logging on or off. If 1, on, 0 off
+        self.ERROR = 1 #flag for turning error logging on or off. If 1, on, 0 off
         
         if (self.ERROR == 1):
-             self.log_trajectories = LogFile("/home/racecar/trajectory_log1.csv",["trajectories"])
-             self.log_distances = LogFile("/home/racecar/distance_log1.csv",["distances"])
+             self.log_distances = LogFile("/home/racecar/distance_log3.csv",["distances"])
 
+        self.fake_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.fake_cb)
+
+    def fake_cb (self, msg):
+        pass
 
     def odom_cb(self, msg):
         x = msg.pose.pose.position.x
@@ -101,6 +104,7 @@ class PathPlan:
         self.plan_path(0,self.end_point,0)
         
     def plan_path(self, start_point, end_point, map):
+        self.time = rospy.get_time()
         if not self.end_resolved or not self.start_resolved or not self.map.resolved:
             return
         rospy.logwarn("Beginning Path Planning")
@@ -210,8 +214,8 @@ class PathPlan:
 
         #log the distance of the path + the trajectory
         if (self.ERROR == 1):
-             self.log_distances.log(str(rospy.get_time()),[self.trajectory.update_distances()])
-             self.trajectory.save("/home/racecar/trajectory_log_" + str(rospy.get_time())+ ".csv")
+             self.log_distances.log(str(rospy.get_time()-self.time),[self.trajectory.update_distances()])
+             self.trajectory.save("/home/racecar/trajectory_log_" + str(rospy.get_time()-self.time)+ ".csv")
 
 
     def steer(self, from_node, to_node):
