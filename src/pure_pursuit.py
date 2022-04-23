@@ -34,9 +34,9 @@ class PurePursuit(object):
         self.fake_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.fake_cb)
 
         #logs distances from line over time, plus use final time - initial time to get time to node
-        self.ERROR = 1 #flag for turning error logging on or off. If 1, on, 0 off
-        if (self.ERROR == 1):
-            self.log_error = LogFile("/home/racecar/distancesPPlog1.csv",["distance"])
+        #self.ERROR = 1 #flag for turning error logging on or off. If 1, on, 0 off
+        #if (self.ERROR == 1):
+            #self.log_error = LogFile("/home/racecar/distancesPPlog1.csv",["distance"])
     def fake_cb (self, msg):
         pass
     def lineseg_dists(self, p, a, b):
@@ -216,9 +216,9 @@ class PurePursuit(object):
         self.drive_pub.publish(self.drive_cmd)
 
         #log the error
-        if (self.ERROR == 1):
-             e = self.lineseg_dists(self.car_pos,np.transpose(array_of_poses[:2,np.argmin(segment_lengths)]), np.transpose(array_of_poses[:2, np.argmin(segment_lengths)+1]))
-             self.log_error.log(str(rospy.get_time()),[e])
+        #if (self.ERROR == 1):
+             #e = self.lineseg_dists(self.car_pos,np.transpose(array_of_poses[:2,np.argmin(segment_lengths)]), np.transpose(array_of_poses[:2, np.argmin(segment_lengths)+1]))
+             #self.log_error.log(str(rospy.get_time()),[e])
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
