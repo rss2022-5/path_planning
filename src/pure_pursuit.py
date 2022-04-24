@@ -18,33 +18,22 @@ class PurePursuit(object):
     """
     def __init__(self):
         self.odom_topic = rospy.get_param("~odom_topic")
-        self.lookahead = 1.2  #1.2 Meter works pretty well without velocity modulation
-        self.speed = 2.0  #RESET THIS for testing!!!
+        self.lookahead = 1.5  #1.2 Meter works pretty well without velocity modulation
+        self.speed = 1.0  #RESET THIS for testing!!!
         self.wrap = 0
         self.wheelbase_length = 0.325
         self.trajectory = utils.LineTrajectory("/followed_trajectory")
-        self.traj_sub = rospy.Subscriber("/trajectory/current",
-        PoseArray,
-        self.trajectory_callback,
-        queue_size=1)
-        self.drive_pub = rospy.Publisher("/drive",
-        AckermannDriveStamped,
-        queue_size=1)
+        self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
+        self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         # self.listener=tf.TransformListener()
-        self.odom_sub = rospy.Subscriber(self.odom_topic,
-        Odometry,
-        self.odom_callback,
-        queue_size=10)
+        self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=10)
         self.drive_cmd = AckermannDriveStamped()
         #Subscribe to localization and get my current x and y points in the map frame
         self.traj_message = []
-        self.marker_pub = rospy.Publisher("/lookahead_intersection",
-        Marker,
-        queue_size=1)
+        self.marker_pub = rospy.Publisher("/lookahead_intersection", Marker, queue_size=1)
         self.circle_pub = rospy.Publisher("/car_circle", Marker,queue_size=1)
         self.car_pos = np.array([0, 0])
-        self.fake_sub = rospy.Subscriber("/trajectory/current", PoseArray,
-        self.fake_cb)
+        self.fake_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.fake_cb)
         self.safety_point_index = 0
 
         #logs distances from line over time, plus use final time - initial time to get time to node
@@ -164,8 +153,7 @@ class PurePursuit(object):
         ori = msg.pose.pose.orientation
 
         theta = 2 * np.arccos(ori.w)
-        exp_position, exp_quaternion = np.array(
-        [pos.x, pos.y, theta]), np.array([ori.x, ori.y, ori.z, ori.w])
+        exp_position, exp_quaternion = np.array([pos.x, pos.y, theta]), np.array([ori.x, ori.y, ori.z, ori.w])
 
         # self.listener.waitForTransform("map","base_link_pf", rospy.Time(), rospy.Duration(10.0))
         # t = self.listener.getLatestCommonTime("map","base_link_pf")
@@ -176,8 +164,7 @@ class PurePursuit(object):
         self.car_pos = np.array([pos.x, pos.y])
         self.circle()
         #Make it a numpy array where first row is x value, second row is y value
-        array_of_poses = np.transpose(
-        np.array([[p.position.x, p.position.y] for p in self.traj_message]))
+        array_of_poses = np.transpose(np.array([[p.position.x, p.position.y] for p in self.traj_message]))
 
         if len(array_of_poses) == 0:
             return
@@ -190,9 +177,7 @@ class PurePursuit(object):
         try:
             segment_lengths = []
             for col in range(col_num - 1):
-                dist = self.lineseg_dists(self.car_pos, array_of_poses[:2,
-                col],
-                array_of_poses[:2, col +1])
+                dist = self.lineseg_dists(self.car_pos, array_of_poses[:2,col],array_of_poses[:2, col +1])
                 segment_lengths.append(dist)
                 closest = np.argmin(segment_lengths)
                 #closest = np.argmin(
@@ -206,18 +191,14 @@ class PurePursuit(object):
         found = False
         for i in range(closest, len(segment_lengths)):
 
-            inter_tuple = self.find_int(self.car_pos,self.lookahead,
-            array_of_poses[:2, i],
-            array_of_poses[:2, i + 1])
+            inter_tuple = self.find_int(self.car_pos,self.lookahead, array_of_poses[:2, i], array_of_poses[:2, i + 1])
             if inter_tuple is None:
-                rospy.logwarn("Hey there cowboy, the car is offtrack")
+                # rospy.logwarn("Hey there cowboy, the car is offtrack")
                 continue
 
             result_front, result_back = inter_tuple
-            relative_x_front, relative_y_front = self.map_to_car_convert(
-            result_front, exp_position, exp_quaternion)
-            relative_x_back, relative_y_back = self.map_to_car_convert(
-            result_back, exp_position, exp_quaternion)
+            relative_x_front, relative_y_front = self.map_to_car_convert(result_front, exp_position, exp_quaternion)
+            relative_x_back, relative_y_back = self.map_to_car_convert(result_back, exp_position, exp_quaternion)
             self.draw_marker(relative_x_front, relative_y_front, 1)
             # self.draw_marker(relative_x_back, relative_y_back,2)
             self.relative_x, self.relative_y = relative_x_front, relative_y_front
@@ -226,8 +207,7 @@ class PurePursuit(object):
 
         if not found:
             result_front = array_of_poses[:, closest + 1].reshape(-1)
-            relative_x_front, relative_y_front = self.map_to_car_convert(
-            result_front, exp_position, exp_quaternion)
+            relative_x_front, relative_y_front = self.map_to_car_convert(result_front, exp_position, exp_quaternion)
             self.draw_marker(relative_x_front, relative_y_front, 1)
             # self.draw_marker(relative_x_back, relative_y_back,2)
             self.relative_x, self.relative_y = relative_x_front, relative_y_front
@@ -236,14 +216,12 @@ class PurePursuit(object):
         #distnace from car to next seg_end
         ahead = 1
         try:
-            start_of_next_seg = np.transpose(array_of_poses[:2,
-            closest + ahead])
+            start_of_next_seg = np.transpose(array_of_poses[:2, closest + ahead])
         except:
             start_of_next_seg = np.transpose(array_of_poses[:2, -1])
 
         l = np.sqrt(self.relative_x**2 + self.relative_y**2)
-        a, b = self.map_to_car_convert(start_of_next_seg, exp_position,
-        exp_quaternion)
+        a, b = self.map_to_car_convert(start_of_next_seg, exp_position, exp_quaternion)
         new_l = np.sqrt(a**2 + b**2)
         #Distance to point to drive to
 
@@ -255,12 +233,10 @@ class PurePursuit(object):
 
         nu = np.arctan2(self.relative_y, self.relative_x)
         self.drive_cmd.drive.speed = self.speed
-        self.drive_cmd.drive.steering_angle = np.arctan(
-        2 * self.wheelbase_length * np.sin(nu) / l)
+        self.drive_cmd.drive.steering_angle = np.arctan(2 * self.wheelbase_length * np.sin(nu) / l)
 
         #Solved an issue where drive angle was -1 --> Stopped car
-        angle_threshold = np.clip(abs(self.drive_cmd.drive.steering_angle),
-        -0.36, 0.36)
+        angle_threshold = np.clip(abs(self.drive_cmd.drive.steering_angle), -0.36, 0.36)
 
         #If we are making a sharp turn, might be nice to slow down a bit.
         if angle_threshold > 0.25:
@@ -271,7 +247,9 @@ class PurePursuit(object):
         last_point = np.transpose(array_of_poses[:2, -1])
         if np.linalg.norm(last_point - self.car_pos) < safety:
             self.drive_cmd.drive.speed = 0
-            self.drive_pub.publish(self.drive_cmd)
+        
+        
+        self.drive_pub.publish(self.drive_cmd)
 
         #log the error
         # if (self.ERROR == 1):

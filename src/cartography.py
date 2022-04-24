@@ -59,7 +59,7 @@ class Map:
         self.rotation = origin_o[2]
         
 
-        # safe a dilated copy of the map, for collision detection
+        # save a dilated copy of the map, for collision detection
         r = int(2.* self.collision_radius / self.resolution)
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (r, r))
         self.map_dilated = cv2.dilate(self.map, kernel)
